@@ -1,0 +1,34 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/iot_mqtt_server/app/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model SensorReading {
+  id          String   @id @default(cuid())
+  deviceId    String   @default("esp32-01")
+  temperature Float
+  humidity    Float
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  @@index([timestamp])
+  @@index([deviceId, timestamp])
+  @@map("sensor_readings")
+}
+
+model DeviceStatus {
+  id         String   @id @default(cuid())
+  deviceId   String   @unique
+  lastSeen   DateTime @default(now())
+  isOnline   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@map("device_status")
+}
