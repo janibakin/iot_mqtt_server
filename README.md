@@ -222,27 +222,49 @@ Here's a simple Arduino sketch for ESP32 to send telemetry:
 #include <PubSubClient.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
+#include "time.h"
 
+// WiFi Configuration
 const char* ssid = "your-wifi-ssid";
 const char* password = "your-wifi-password";
+
+// MQTT Configuration
 const char* mqtt_server = "your-pi-ip";
+const int   mqtt_port = 1883;
 const char* device_id = "esp32-01";
 
-DHT dht(2, DHT22);
+// NTP Configuration
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 0;
+const int   daylightOffset_sec = 3600;
+
+// DHT Sensor Configuration
+#define DHT_PIN 17
+#define DHT_TYPE DHT22
+DHT dht(DHT_PIN, DHT_TYPE);
+
 WiFiClient espClient;
 PubSubClient client(espClient);
+
+void reconnect();
 
 void setup() {
   Serial.begin(115200);
   dht.begin();
-  
+
+  // Connect to WiFi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  
-  client.setServer(mqtt_server, 1883);
+  Serial.println("WiFi connected");
+
+  // Initialize NTP
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  // Configure MQTT
+  client.setServer(mqtt_server, mqtt_port);
 }
 
 void loop() {
@@ -250,35 +272,44 @@ void loop() {
     reconnect();
   }
   client.loop();
-  
-  float temp = dht.readTemperature();
+
+  // Read sensor data
+  float temperature = dht.readTemperature();
   float humidity = dht.readHumidity();
-  
-  if (!isnan(temp) && !isnan(humidity)) {
+
+  if (!isnan(temperature) && !isnan(humidity)) {
+    // Create JSON message
     StaticJsonDocument<200> doc;
-    doc["temperature_c"] = temp;
+    doc["temperature_c"] = temperature;
     doc["humidity_pct"] = humidity;
-    doc["ts"] = WiFi.getTime(); // You may need to format this properly
-    
-    String payload;
-    serializeJson(doc, payload);
-    
+    time_t now;
+    time(&now);
+    char timestamp[sizeof "YYYY-MM-DDTHH:MM:SSZ"];
+    strftime(timestamp, sizeof timestamp, "%FT%TZ", gmtime(&now));
+    doc["ts"] = timestamp;
+
+    String jsonString;
+    serializeJson(doc, jsonString);
+
+    // Publish to MQTT
     String topic = "sensors/" + String(device_id) + "/telemetry";
-    client.publish(topic.c_str(), payload.c_str());
+    client.publish(topic.c_str(), jsonString.c_str());
+    Serial.println("Data sent: " + jsonString);
   }
-  
+
   delay(30000); // Send every 30 seconds
 }
 
 void reconnect() {
   while (!client.connected()) {
-    if (client.connect(device_id)) {
+    if (client.connect("ESP32Client")) {
       Serial.println("MQTT connected");
     } else {
       delay(5000);
     }
   }
 }
+
 ```
 
 ## Troubleshooting
