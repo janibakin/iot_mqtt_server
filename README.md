@@ -1,130 +1,221 @@
 
-# IoT MQTT Monitoring Dashboard
+# IoT MQTT Telemetry Server
 
-A complete IoT monitoring web application that receives temperature and humidity data from ESP32 sensors via MQTT and displays real-time dashboards with historical charts.
+A complete Rust-based IoT telemetry server designed for Raspberry Pi that ingests MQTT messages from ESP32 devices, stores them in PostgreSQL, and provides a web dashboard for visualization.
 
 ## Features
 
-- 🌡️ **Real-time Monitoring**: Live temperature and humidity displays with auto-refresh
-- 📊 **Historical Charts**: Interactive time-series charts with multiple time granularities (1 day to 1 year)
-- 🔗 **MQTT Integration**: Receives sensor data via MQTT protocol
-- ⚡ **WebSocket Updates**: Real-time dashboard updates without page refresh
-- 📱 **Responsive Design**: Works seamlessly on desktop and mobile devices
-- 💾 **PostgreSQL Storage**: Efficient time-series data storage with proper indexing
-- 🔧 **Device Status**: Monitor ESP32 device connectivity and health
+- **MQTT Ingestion**: Subscribes to sensor telemetry from ESP32 devices
+- **PostgreSQL Storage**: Efficient time-series data storage with automatic cleanup
+- **Web Dashboard**: Clean, responsive interface with Chart.js visualizations
+- **REST API**: JSON endpoints for device management and data retrieval
+- **Time Aggregation**: Multiple time ranges (1d, 1w, 1m, 6m, 1y) with appropriate bucketing
+- **Auto-reconnection**: Robust error handling and automatic reconnection for MQTT
+- **Data Retention**: Automatic cleanup of data older than 1 year
 
 ## Architecture
 
-- **Frontend**: Next.js 14 with React 18, Tailwind CSS, Framer Motion
-- **Backend**: Next.js API routes with MQTT client integration
-- **Database**: PostgreSQL with Prisma ORM
-- **Real-time**: WebSocket connections for live updates
-- **Charts**: Recharts for responsive data visualization
+- **Async Rust**: Built with Tokio for high-performance async operations
+- **MQTT Client**: Uses rumqttc for reliable MQTT communication
+- **Web Server**: Axum-based HTTP server with static file serving
+- **Database**: SQLx for type-safe PostgreSQL operations
+- **Frontend**: Vanilla JavaScript with Chart.js for visualizations
 
 ## Prerequisites
 
-### Raspberry Pi Setup
+### System Requirements
+- Raspberry Pi (3B+ or newer recommended)
+- Rust 1.70+ (installed via rustup)
+- PostgreSQL 12+
+- MQTT Broker (Mosquitto recommended)
 
-1. **Install Node.js 18+**:
+### Installation on Raspberry Pi
+
+1. **Install Rust**:
    ```bash
-   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-   sudo apt-get install -y nodejs
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source ~/.cargo/env
    ```
 
 2. **Install PostgreSQL**:
    ```bash
-   sudo apt-get update
-   sudo apt-get install -y postgresql postgresql-contrib
+   sudo apt update
+   sudo apt install postgresql postgresql-contrib
    sudo systemctl start postgresql
    sudo systemctl enable postgresql
    ```
 
-3. **Install Mosquitto MQTT Broker**:
+3. **Install MQTT Broker**:
    ```bash
-   sudo apt-get install -y mosquitto mosquitto-clients
+   sudo apt install mosquitto mosquitto-clients
    sudo systemctl start mosquitto
    sudo systemctl enable mosquitto
    ```
 
-### MQTT Broker Configuration
-
-1. **Configure Mosquitto** (optional - default settings work for local development):
+4. **Setup Database**:
    ```bash
-   sudo nano /etc/mosquitto/mosquitto.conf
+   sudo -u postgres createuser -P pi  # Enter password when prompted
+   sudo -u postgres createdb -O pi telemetry
    ```
 
-   Add these lines for basic configuration:
-   ```
-   listener 1883 0.0.0.0
-   allow_anonymous true
-   ```
+## Setup
 
-2. **Restart Mosquitto**:
+1. **Clone and build the project**:
    ```bash
-   sudo systemctl restart mosquitto
+   git clone <repository-url>
+   cd iot_mqtt_server
+   cargo build --release
    ```
 
-3. **Test MQTT Broker**:
+2. **Configure environment**:
    ```bash
-   # Subscribe to test topic
-   mosquitto_sub -h localhost -t "sensor/data"
-   
-   # In another terminal, publish test message
-   mosquitto_pub -h localhost -t "sensor/data" -m '{"temperature": 25.5, "humidity": 60.2}'
-   ```
-
-## Installation
-
-1. **Clone and Install**:
-   ```bash
-   cd /path/to/iot_mqtt_server/app
-   yarn install
-   ```
-
-2. **Database Setup**:
-   ```bash
-   # Copy environment variables
    cp .env.example .env
-   
-   # Edit .env with your database URL
-   nano .env
-   
-   # Generate Prisma client and push schema
-   yarn prisma generate
-   yarn prisma db push
-   
-   # Optional: Seed with sample data
-   yarn prisma db seed
+   # Edit .env with your specific configuration
    ```
 
-3. **Environment Variables** (update `.env`):
-   ```env
-   DATABASE_URL="postgresql://user:password@localhost:5432/iot_monitoring"
-   MQTT_BROKER_URL="mqtt://localhost:1883"
-   MQTT_TOPIC="sensor/data"
-   WS_PORT=8080
-   ```
-
-## Running the Application
-
-1. **Start the Application**:
+3. **Run database migrations**:
    ```bash
-   cd /path/to/iot_mqtt_server/app
-   yarn dev
+   # Migrations run automatically on startup, but you can also run manually:
+   cargo install sqlx-cli --no-default-features --features postgres
+   sqlx migrate run
    ```
 
-2. **Access Dashboard**:
-   Open http://localhost:3000 in your browser
-
-3. **Monitor Logs**:
+4. **Start the server**:
    ```bash
-   # Check MQTT connections and sensor data reception
-   tail -f ~/.pm2/logs/iot-dashboard-out.log
+   cargo run --release
    ```
 
-## ESP32 Configuration
+## Configuration
 
-### Arduino Code Example
+Environment variables (see `.env.example`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_ADDR` | `0.0.0.0:8080` | Web server bind address |
+| `MQTT_BROKER_URL` | `mqtt://localhost:1883` | MQTT broker connection URL |
+| `MQTT_CLIENT_ID` | `pi-telemetry` | MQTT client identifier |
+| `MQTT_TOPIC_FILTER` | `sensors/+/telemetry` | MQTT topic subscription pattern |
+| `PG_URL` | `postgres://pi:password@localhost:5432/telemetry` | PostgreSQL connection string |
+| `LOG_LEVEL` | `info` | Logging level (trace, debug, info, warn, error) |
+
+## MQTT Message Format
+
+ESP32 devices should publish JSON messages to `sensors/{device_id}/telemetry`:
+
+```json
+{
+  "temperature_c": 24.3,
+  "humidity_pct": 40.2,
+  "ts": "2025-08-25T12:00:00Z"
+}
+```
+
+- `temperature_c`: Temperature in Celsius (optional)
+- `humidity_pct`: Humidity percentage (optional)
+- `ts`: ISO 8601 timestamp (optional, defaults to server time)
+
+## API Endpoints
+
+### GET /api/devices
+Returns list of all device IDs that have sent data.
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": ["esp32-01", "esp32-02"]
+}
+```
+
+### GET /api/readings
+Retrieve aggregated sensor readings for a device.
+
+**Parameters**:
+- `device_id` (required): Device identifier
+- `range` (optional): Time range - `1d`, `1w`, `1m`, `6m`, `1y` (default: `1d`)
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "ts": "2025-08-25T12:00:00Z",
+      "avg_temperature_c": 24.3,
+      "avg_humidity_pct": 40.2
+    }
+  ]
+}
+```
+
+### GET /api/health
+Health check endpoint.
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "status": "healthy",
+    "timestamp": "2025-08-25T12:00:00Z"
+  }
+}
+```
+
+## Time Aggregation
+
+Data is automatically aggregated based on the requested time range:
+
+| Range | Interval | Bucket Size |
+|-------|----------|-------------|
+| 1d | Last 24 hours | 5 minutes |
+| 1w | Last 7 days | 1 hour |
+| 1m | Last 30 days | 6 hours |
+| 6m | Last 180 days | 1 day |
+| 1y | Last 365 days | 1 week |
+
+## Web Dashboard
+
+Access the dashboard at `http://your-pi-ip:8080`. Features include:
+
+- Device selection dropdown
+- Time range selection (1 day to 1 year)
+- Real-time temperature and humidity charts
+- Connection status indicator
+- Auto-refresh every 30 seconds
+
+## Running as a Service
+
+Create a systemd service file `/etc/systemd/system/iot-telemetry.service`:
+
+```ini
+[Unit]
+Description=IoT MQTT Telemetry Server
+After=network.target postgresql.service mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/iot_mqtt_server
+ExecStart=/home/pi/iot_mqtt_server/target/release/iot_mqtt_server
+Restart=always
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable iot-telemetry
+sudo systemctl start iot-telemetry
+```
+
+## ESP32 Example Code
+
+Here's a simple Arduino sketch for ESP32 to send telemetry:
 
 ```cpp
 #include <WiFi.h>
@@ -132,20 +223,12 @@ A complete IoT monitoring web application that receives temperature and humidity
 #include <DHT.h>
 #include <ArduinoJson.h>
 
-// WiFi Configuration
 const char* ssid = "your-wifi-ssid";
 const char* password = "your-wifi-password";
+const char* mqtt_server = "your-pi-ip";
+const char* device_id = "esp32-01";
 
-// MQTT Configuration
-const char* mqtt_server = "192.168.1.100"; // Raspberry Pi IP
-const int mqtt_port = 1883;
-const char* mqtt_topic = "sensor/data";
-
-// DHT Sensor Configuration
-#define DHT_PIN 2
-#define DHT_TYPE DHT22
-DHT dht(DHT_PIN, DHT_TYPE);
-
+DHT dht(2, DHT22);
 WiFiClient espClient;
 PubSubClient client(espClient);
 
@@ -153,16 +236,13 @@ void setup() {
   Serial.begin(115200);
   dht.begin();
   
-  // Connect to WiFi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("WiFi connected");
   
-  // Configure MQTT
-  client.setServer(mqtt_server, mqtt_port);
+  client.setServer(mqtt_server, 1883);
 }
 
 void loop() {
@@ -171,24 +251,20 @@ void loop() {
   }
   client.loop();
   
-  // Read sensor data
-  float temperature = dht.readTemperature();
+  float temp = dht.readTemperature();
   float humidity = dht.readHumidity();
   
-  if (!isnan(temperature) && !isnan(humidity)) {
-    // Create JSON message
+  if (!isnan(temp) && !isnan(humidity)) {
     StaticJsonDocument<200> doc;
-    doc["temperature"] = temperature;
-    doc["humidity"] = humidity;
-    doc["timestamp"] = WiFi.getTime();
-    doc["deviceId"] = "esp32-01";
+    doc["temperature_c"] = temp;
+    doc["humidity_pct"] = humidity;
+    doc["ts"] = WiFi.getTime(); // You may need to format this properly
     
-    String jsonString;
-    serializeJson(doc, jsonString);
+    String payload;
+    serializeJson(doc, payload);
     
-    // Publish to MQTT
-    client.publish(mqtt_topic, jsonString.c_str());
-    Serial.println("Data sent: " + jsonString);
+    String topic = "sensors/" + String(device_id) + "/telemetry";
+    client.publish(topic.c_str(), payload.c_str());
   }
   
   delay(30000); // Send every 30 seconds
@@ -196,7 +272,7 @@ void loop() {
 
 void reconnect() {
   while (!client.connected()) {
-    if (client.connect("ESP32Client")) {
+    if (client.connect(device_id)) {
       Serial.println("MQTT connected");
     } else {
       delay(5000);
@@ -205,146 +281,40 @@ void reconnect() {
 }
 ```
 
-### Required Libraries
-
-Install these libraries in Arduino IDE:
-- WiFi (ESP32 Core)
-- PubSubClient by Nick O'Leary
-- DHT sensor library by Adafruit
-- ArduinoJson by Benoit Blanchon
-
-## API Endpoints
-
-- `GET /api/current` - Get latest sensor readings and device status
-- `GET /api/historical?timeRange=1d&deviceId=esp32-01` - Get historical data
-- `GET /api/mqtt` - Check MQTT broker connection status
-- `GET /api/websocket` - WebSocket connection info
-
-## Time Granularities
-
-- `1d` - Last 24 hours (hourly averages)
-- `1m` - Last month (daily averages)
-- `3m` - Last 3 months (daily averages)
-- `6m` - Last 6 months (weekly averages)
-- `1y` - Last year (monthly averages)
-
-## Production Deployment
-
-### Using PM2
-
-```bash
-# Install PM2
-npm install -g pm2
-
-# Build application
-yarn build
-
-# Start with PM2
-pm2 start npm --name "iot-dashboard" -- start
-
-# Setup auto-restart on boot
-pm2 startup
-pm2 save
-```
-
-### Using Docker
-
-```dockerfile
-FROM node:18-alpine
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-
-COPY . .
-RUN npm run build
-
-EXPOSE 3000 8080
-CMD ["npm", "start"]
-```
-
-## Monitoring & Maintenance
-
-### Database Maintenance
-
-```bash
-# Check database size
-yarn prisma db execute --command "SELECT pg_size_pretty(pg_database_size('your_db_name'))"
-
-# Clean old data (keep last 3 months)
-yarn prisma db execute --command "DELETE FROM sensor_readings WHERE timestamp < NOW() - INTERVAL '3 months'"
-
-# Analyze table performance
-yarn prisma db execute --command "ANALYZE sensor_readings"
-```
-
-### MQTT Monitoring
-
-```bash
-# Monitor MQTT traffic
-mosquitto_sub -v -t '#'
-
-# Check specific device topic
-mosquitto_sub -t 'sensor/data'
-
-# Test MQTT broker status
-systemctl status mosquitto
-```
-
 ## Troubleshooting
 
 ### Common Issues
 
-1. **MQTT Connection Failed**:
-   - Check if Mosquitto is running: `sudo systemctl status mosquitto`
-   - Verify firewall settings: `sudo ufw allow 1883`
-   - Check broker URL in environment variables
+1. **Database connection failed**: Ensure PostgreSQL is running and credentials are correct
+2. **MQTT connection failed**: Check if Mosquitto broker is running on port 1883
+3. **Permission denied**: Ensure the user has read/write access to the project directory
+4. **Port already in use**: Change `APP_ADDR` to use a different port
 
-2. **Database Connection Error**:
-   - Verify PostgreSQL is running: `sudo systemctl status postgresql`
-   - Check DATABASE_URL in .env file
-   - Run: `yarn prisma db push`
+### Logs
 
-3. **WebSocket Connection Failed**:
-   - Ensure WS_PORT (default 8080) is available
-   - Check firewall settings: `sudo ufw allow 8080`
-   - Verify no other services using the port
-
-4. **ESP32 Not Sending Data**:
-   - Check WiFi connection on ESP32
-   - Verify MQTT server IP address
-   - Monitor Serial output for error messages
-   - Check DHT sensor wiring
-
-### Logs and Debugging
-
+View application logs:
 ```bash
-# Application logs
-tail -f ~/.pm2/logs/iot-dashboard-out.log
-tail -f ~/.pm2/logs/iot-dashboard-error.log
+# If running directly
+RUST_LOG=debug cargo run
 
-# MQTT broker logs
-sudo journalctl -u mosquitto -f
+# If running as service
+sudo journalctl -u iot-telemetry -f
+```
 
-# PostgreSQL logs
-sudo journalctl -u postgresql -f
+### Database Queries
+
+Check data directly:
+```sql
+-- Connect to database
+psql -U pi -d telemetry
+
+-- View recent readings
+SELECT * FROM readings ORDER BY ts DESC LIMIT 10;
+
+-- Check device count
+SELECT device_id, COUNT(*) FROM readings GROUP BY device_id;
 ```
 
 ## License
 
 MIT License - see LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## Support
-
-For issues and questions:
-- Check the troubleshooting section
-- Review application logs
-- Create an issue with detailed information about your setup

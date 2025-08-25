@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Telemetry Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>IoT Telemetry Dashboard</h1>
+            <div class="status" id="status">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="deviceSelect">Device:</label>
+                <select id="deviceSelect">
+                    <option value="">Select a device...</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="rangeSelect">Time Range:</label>
+                <select id="rangeSelect">
+                    <option value="1d">Last 24 Hours</option>
+                    <option value="1w">Last Week</option>
+                    <option value="1m">Last Month</option>
+                    <option value="6m">Last 6 Months</option>
+                    <option value="1y">Last Year</option>
+                </select>
+            </div>
+            
+            <button id="refreshBtn" class="btn-primary">Refresh</button>
+        </div>
+
+        <div class="charts-container">
+            <div class="chart-wrapper">
+                <h3>Temperature (°C)</h3>
+                <canvas id="temperatureChart"></canvas>
+            </div>
+            
+            <div class="chart-wrapper">
+                <h3>Humidity (%)</h3>
+                <canvas id="humidityChart"></canvas>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="info-item">
+                <span class="label">Last Updated:</span>
+                <span id="lastUpdated">-</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Data Points:</span>
+                <span id="dataPoints">-</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Ignore the automatically generated build directory
+target/
+.env
