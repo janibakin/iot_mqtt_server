@@ -50,6 +50,11 @@ A complete Rust-based IoT telemetry server designed for Raspberry Pi that ingest
    sudo apt install mosquitto mosquitto-clients
    sudo systemctl start mosquitto
    sudo systemctl enable mosquitto
+
+   # Optional: Enable anonymous access and set listener to default port 1883
+   echo "listener 1883" | sudo tee -a /etc/mosquitto/mosquitto.conf
+   echo "allow_anonymous true" | sudo tee -a /etc/mosquitto/mosquitto.conf
+   sudo systemctl restart mosquitto
    ```
 
 4. **Setup Database**:
